@@ -1,139 +1,202 @@
 import Link from "next/link";
+import CalendarMonth from "../_components/CalendarMonth";
 
 export default function MainPage() {
   return (
-    <>
+    <main style={styles.main}>
       <div style={styles.topbar}>
         <input
-          placeholder="Quick search events, syllabi, or courses..."
           style={styles.search}
+          placeholder="Quick search events, syllabi, or courses..."
+          aria-label="Search"
         />
       </div>
 
-      <div style={styles.stats}>
-        <StatCard title="Pending Tasks" value="—" subtitle="Connect data source" href="/todo" />
-        <StatCard title="Upcoming Exams" value="—" subtitle="Connect data source" href="/calendar" />
-        <StatCard title="Efficiency" value="—" subtitle="Connect data source" href="/settings" />
+      <div style={styles.kpiRow}>
+        <KpiCard title="Pending Tasks" subtitle="Connect data source" href="/todo" />
+        <KpiCard title="Upcoming Exams" subtitle="Connect data source" href="/todo" />
+        <KpiCard title="Efficiency" subtitle="Connect data source" href="/todo" />
       </div>
 
-      <div style={styles.sectionHeader}>
+      <div style={styles.titleRow}>
         <div>
-          <h1 style={{ margin: 0 }}>Academic Schedule</h1>
-          <p style={{ margin: 0, opacity: 0.6 }}>
-            Template view — content area changes, sidebar stays fixed
-          </p>
+          <h1 style={styles.h1}>Academic Schedule</h1>
+          <p style={styles.sub}>Template view — content area changes, sidebar stays fixed</p>
         </div>
 
         <div style={styles.actions}>
           <Link href="/calendar" style={styles.secondaryBtn}>
             View Calendar
           </Link>
-          <Link href="/todo" style={styles.primaryBtn}>
-            ＋ Add Item
+          <Link href="/calendar" style={styles.primaryBtn}>
+            + Add Item
           </Link>
         </div>
       </div>
 
-      <section style={styles.emptyCard}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>No schedule items yet</h2>
-        <p style={{ margin: "8px 0 0 0", opacity: 0.65, lineHeight: 1.4 }}>
-          Once you connect Brightspace / Notion / Google Calendar, items will appear here.
-        </p>
+      <section style={styles.block}>
+        <div style={styles.blockHeader}>
+          <div>
+            <div style={styles.blockTitle}>No schedule items yet</div>
+            <div style={styles.blockSub}>
+              Once you connect Brightspace / Notion / Google Calendar, items will appear here.
+            </div>
+          </div>
+        </div>
       </section>
-    </>
+
+      <section style={styles.block}>
+        <div style={styles.blockHeader}>
+          <div>
+            <div style={styles.blockTitle}>Mini calendar</div>
+            <div style={styles.blockSub}>
+              Same Events database as the Full Calendar page.
+            </div>
+          </div>
+
+          <Link href="/calendar" style={styles.linkBtn}>
+            Open full calendar →
+          </Link>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <CalendarMonth compact={true} />
+        </div>
+      </section>
+    </main>
   );
 }
 
-function StatCard({
+function KpiCard({
   title,
-  value,
   subtitle,
   href,
 }: {
   title: string;
-  value: string;
   subtitle: string;
   href: string;
 }) {
   return (
-    <Link href={href} style={styles.statCard}>
-      <div>
-        <div style={styles.statTitle}>{title}</div>
-        <div style={styles.statValue}>{value}</div>
-        <div style={styles.statSub}>{subtitle}</div>
+    <Link href={href} style={styles.kpiCard}>
+      <div style={styles.kpiTop}>
+        <div style={styles.kpiTitle}>{title}</div>
+        <div style={styles.kpiOpen}>
+          Open <span aria-hidden>→</span>
+        </div>
       </div>
-      <div style={styles.statCta}>Open →</div>
+      <div style={styles.kpiValue} aria-label={`${title} value`}>
+        —
+      </div>
+      <div style={styles.kpiSub}>{subtitle}</div>
     </Link>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  topbar: { display: "flex", justifyContent: "flex-start", alignItems: "center" },
+  main: { padding: 24 },
+
+  topbar: { marginBottom: 18 },
   search: {
-    width: "min(900px, 100%)",
-    padding: 12,
-    borderRadius: 14,
-    border: "1px solid #E5E7EB",
+    width: "100%",
+    maxWidth: 980,
+    height: 52,
+    borderRadius: 18,
+    border: "1px solid rgba(15,23,42,0.08)",
+    background: "rgba(255,255,255,0.9)",
+    padding: "0 18px",
     outline: "none",
-    background: "white",
+    fontWeight: 700,
+    color: "#0f172a",
   },
 
-  stats: {
+  kpiRow: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 16,
+    marginBottom: 22,
+    maxWidth: 1120,
   },
-
-  statCard: {
-    background: "white",
-    padding: 18,
-    borderRadius: 16,
+  kpiCard: {
+    display: "block",
     textDecoration: "none",
-    color: "#0F172A",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    border: "1px solid rgba(15, 23, 42, 0.06)",
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 18,
+    padding: 18,
+    boxShadow: "0 1px 0 rgba(15,23,42,0.03)",
   },
-  statTitle: { fontWeight: 800, opacity: 0.7, fontSize: 13 },
-  statValue: { fontSize: 30, fontWeight: 900, marginTop: 6 },
-  statSub: { marginTop: 4, fontSize: 12, opacity: 0.6, fontWeight: 700 },
-  statCta: { fontSize: 12, opacity: 0.6, fontWeight: 800 },
-
-  sectionHeader: {
+  kpiTop: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    marginTop: 4,
   },
+  kpiTitle: { fontWeight: 900, color: "rgba(15,23,42,0.7)" },
+  kpiOpen: { fontWeight: 800, color: "rgba(15,23,42,0.55)" },
+  kpiValue: { fontSize: 34, fontWeight: 950, marginTop: 8, color: "#0f172a" },
+  kpiSub: { marginTop: 6, fontWeight: 700, color: "rgba(15,23,42,0.55)" },
 
-  actions: { display: "flex", gap: 10, alignItems: "center" },
+  titleRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 16,
+    maxWidth: 1120,
+    marginBottom: 16,
+  },
+  h1: {
+    margin: 0,
+    fontSize: 44,
+    fontWeight: 950,
+    letterSpacing: -0.6,
+    color: "#0f172a",
+  },
+  sub: { margin: "6px 0 0 0", fontWeight: 800, color: "rgba(15,23,42,0.55)" },
 
+  actions: { display: "flex", gap: 12, alignItems: "center" },
   secondaryBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid #E5E7EB",
-    background: "white",
-    fontWeight: 800,
     textDecoration: "none",
-    color: "#111827",
-  },
-
-  primaryBtn: {
     padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(79,70,229,0.20)",
-    background: "#4F46E5",
-    color: "white",
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,0.12)",
+    background: "rgba(255,255,255,0.9)",
+    color: "#0f172a",
     fontWeight: 900,
+  },
+  primaryBtn: {
     textDecoration: "none",
+    padding: "10px 16px",
+    borderRadius: 14,
+    border: "1px solid rgba(79,70,229,0.3)",
+    background: "#4f46e5",
+    color: "white",
+    fontWeight: 950,
   },
 
-  emptyCard: {
-    background: "white",
-    borderRadius: 16,
+  block: {
+    maxWidth: 1120,
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 18,
     padding: 18,
-    border: "1px solid rgba(15, 23, 42, 0.06)",
+    marginBottom: 16,
+  },
+  blockHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  blockTitle: { fontSize: 22, fontWeight: 950, color: "#0f172a" },
+  blockSub: { marginTop: 6, fontWeight: 750, color: "rgba(15,23,42,0.6)" },
+  linkBtn: {
+    textDecoration: "none",
+    fontWeight: 900,
+    color: "rgba(79,70,229,0.95)",
+    padding: "8px 10px",
+    borderRadius: 12,
+    border: "1px solid rgba(79,70,229,0.18)",
+    background: "rgba(79,70,229,0.06)",
+    height: 36,
   },
 };
