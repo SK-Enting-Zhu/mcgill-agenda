@@ -1,5 +1,6 @@
 import Link from "next/link";
 import CalendarMonth from "../_components/CalendarMonth";
+import SyllabusUpload from "../_components/SyllabusUpload";
 import styles from "./main.module.css";
 
 export default function MainPage() {
@@ -82,6 +83,11 @@ export default function MainPage() {
           <CalendarMonth compact />
         </div>
       </section>
+
+      <section>
+        <SyllabusUpload />
+      </section>
+
     </main>
   );
 }
