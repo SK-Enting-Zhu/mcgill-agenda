@@ -40,3 +40,60 @@ a {
     color-scheme: dark;
   }
 }
+
+/* ===== Soft hover + click states (global) ===== */
+
+/* Cards (dashboard blocks + KPI cards) */
+.softCard,
+.softKpi {
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.softCard:hover,
+.softKpi:hover {
+  filter: brightness(0.985);
+}
+
+.softCard:active,
+.softKpi:active {
+  filter: brightness(0.97);
+  transform: translateY(1px);
+}
+
+/* Buttons/links */
+.softBtn {
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.softBtn:hover {
+  filter: brightness(0.97);
+}
+
+.softBtn:active {
+  filter: brightness(0.92);
+  transform: translateY(1px);
+}
+
+.softBtn.primary:hover {
+  filter: brightness(0.96);
+}
+
+.softBtn.primary:active {
+  filter: brightness(0.9);
+}
+
+/* Calendar: only darken individual date blocks (best-effort selectors) */
+.miniCalendar button[data-day],
+.miniCalendar [data-day][role="button"] {
+  transition: filter 120ms ease;
+}
+
+.miniCalendar button[data-day]:hover,
+.miniCalendar [data-day][role="button"]:hover {
+  filter: brightness(0.985);
+}
+
+.miniCalendar button[data-day]:active,
+.miniCalendar [data-day][role="button"]:active {
+  filter: brightness(0.97);
+}
