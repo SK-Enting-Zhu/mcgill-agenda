@@ -1,148 +1,188 @@
-import Link from "next/link";
+"use client";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useUser } from "@auth0/nextjs-auth0";
+
+const NAV = [
+  { href: "/main", label: "Main Menu" },
+  { href: "/calendar", label: "Full Calendar" },
+  { href: "/todo", label: "Todo list" },
+  { href: "/notifications", label: "Notifications" },
+  { href: "/settings", label: "Settings" },
+] as const;
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "/";
+  const { user, isLoading } = useUser();
+
   return (
-    <div style={styles.app}>
-      {/* SIDEBAR ALWAYS VISIBLE */}
+    <div style={styles.shell}>
       <aside style={styles.sidebar}>
-        <div style={styles.logoRow}>
-          <div style={styles.logoIcon} aria-hidden>
-            🎓
+        <div style={styles.brandRow}>
+          <div style={styles.logo} aria-hidden>
+            <span style={styles.logoEmoji}>🎓</span>
           </div>
           <div>
-            <div style={styles.logoText}>SyllaBuddy</div>
+            <div style={styles.appName}>SyllaBuddy</div>
+            <div style={styles.appSub}>Dashboard</div>
           </div>
         </div>
 
-        <div style={styles.menuTitle}>MAIN MENU</div>
+        <div style={styles.authRow}>
+          {!isLoading && user?.name ? (
+            <div style={styles.userHint}>Signed in as {user.name}</div>
+          ) : (
+            <div style={styles.userHint}>Not signed in</div>
+          )}
 
-        <nav style={styles.menu}>
-          <SidebarLink href="/main" label="Agenda" />
-          <SidebarLink href="/calendar" label="Full Calendar" />
-          <SidebarLink href="/notifications" label="Notifications" />
-          <SidebarLink href="/settings" label="Settings" />
-          <SidebarLink href="/todo" label="Todo list" />
+          {user ? (
+            <a href="/auth/logout?returnTo=/main" style={styles.authBtn}>
+              Logout
+            </a>
+          ) : (
+            <a href="/auth/login?returnTo=/main" style={styles.authBtn}>
+              Login
+            </a>
+          )}
+        </div>
+
+        <div style={styles.sectionLabel}>MAIN MENU</div>
+
+        <nav style={styles.nav} aria-label="Sidebar navigation">
+          {NAV.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  ...styles.navItem,
+                  ...(active ? styles.navItemActive : null),
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div style={{ flex: 1 }} />
-
-        <div style={styles.userCard}>
-          <div style={styles.avatar}>MS</div>
-          <div>
-            <div style={{ fontWeight: 800 }}>McGill Student</div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>DEMO ACCOUNT</div>
-          </div>
-        </div>
-
-        <Link href="/" style={styles.logout}>
-          ⬅ Back to Login
-        </Link>
+        {/* ✅ Mini calendar REMOVED from sidebar */}
       </aside>
 
-      {/* ONLY THIS CHANGES PER PAGE */}
-      <main style={styles.content}>{children}</main>
+      <main style={styles.main}>
+        <div style={styles.content}>{children}</div>
+      </main>
     </div>
   );
 }
 
-function SidebarLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} style={styles.menuItem}>
-      {label}
-    </Link>
-  );
-}
-
 const styles: Record<string, React.CSSProperties> = {
-  app: {
-    display: "flex",
+  shell: {
     minHeight: "100vh",
-    background: "#F6F7FB",
-    fontFamily: "system-ui",
-    color: "#0F172A",
+    display: "grid",
+    gridTemplateColumns: "320px 1fr",
+    background: "#ffffff",
   },
-
   sidebar: {
-    width: 260,
-    background: "white",
-    padding: 20,
+    position: "sticky",
+    top: 0,
+    alignSelf: "start",
+    height: "100vh",
+    padding: "26px 18px 22px",
+    borderRight: "1px solid rgba(15,23,42,0.10)",
+    background: "rgba(15,23,42,0.02)",
+    overflowY: "auto",
+  },
+  brandRow: {
     display: "flex",
-    flexDirection: "column",
-    gap: 16,
-    borderRight: "1px solid #E5E7EB",
-  },
-
-  logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(79,70,229,0.10)",
-    color: "#4F46E5",
-    fontWeight: 900,
-  },
-  logoText: { fontSize: 18, fontWeight: 900 },
-  logoSub: { fontSize: 12, opacity: 0.55, marginTop: 2 },
-
-  menuTitle: {
-    fontSize: 12,
-    letterSpacing: 1,
-    opacity: 0.5,
-    marginTop: 10,
-  },
-
-  menu: { display: "flex", flexDirection: "column", gap: 8 },
-
-  menuItem: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    textDecoration: "none",
-    color: "#111827",
-    fontWeight: 700,
-    background: "rgba(15, 23, 42, 0.03)",
-    border: "1px solid rgba(15, 23, 42, 0.05)",
-  },
-
-  userCard: {
-    display: "flex",
-    gap: 10,
     alignItems: "center",
-    padding: 12,
-    borderRadius: 14,
-    background: "#F3F4F6",
-    border: "1px solid rgba(15, 23, 42, 0.06)",
+    gap: 14,
+    marginBottom: 10,
   },
-
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: "50%",
-    background: "rgba(15, 23, 42, 0.10)",
-    color: "#111827",
+  logo: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    background: "rgba(124, 58, 237, 0.10)",
     display: "grid",
     placeItems: "center",
+    flex: "0 0 auto",
+  },
+  logoEmoji: {
+    fontSize: 22,
+  },
+  appName: {
+    fontSize: 28,
     fontWeight: 900,
+    letterSpacing: "-0.03em",
+    color: "rgba(15,23,42,0.95)",
+    lineHeight: 1.1,
+  },
+  appSub: {
     fontSize: 12,
+    fontWeight: 800,
+    color: "rgba(15,23,42,0.55)",
+    marginTop: 2,
   },
-
-  logout: {
+  authRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    margin: "10px 0 6px",
+  },
+  userHint: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "rgba(15,23,42,0.55)",
+    maxWidth: 180,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  authBtn: {
     textDecoration: "none",
-    color: "#111827",
-    fontWeight: 700,
-    marginTop: 10,
+    fontSize: 13,
+    fontWeight: 900,
+    padding: "9px 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(15,23,42,0.12)",
+    background: "rgba(15,23,42,0.04)",
+    color: "rgba(15,23,42,0.92)",
+    whiteSpace: "nowrap",
   },
-
-  content: {
-    flex: 1,
-    padding: 30,
+  sectionLabel: {
+    fontSize: 12,
+    letterSpacing: "0.22em",
+    fontWeight: 900,
+    color: "rgba(15,23,42,0.45)",
+    margin: "16px 0 10px",
+  },
+  nav: {
     display: "flex",
     flexDirection: "column",
-    gap: 20,
+    gap: 10,
+  },
+  navItem: {
+    textDecoration: "none",
+    background: "rgba(255,255,255,0.9)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 18,
+    padding: "14px 14px",
+    fontSize: 18,
+    fontWeight: 900,
+    color: "rgba(15,23,42,0.92)",
+  },
+  navItemActive: {
+    background: "rgba(15,23,42,0.06)",
+    border: "1px solid rgba(15,23,42,0.16)",
+  },
+  main: {
+    padding: "26px 26px 50px",
+  },
+  content: {
+    maxWidth: 1200,
   },
 };
