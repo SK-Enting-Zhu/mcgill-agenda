@@ -14,8 +14,7 @@ export default function DashboardLayout({
             🎓
           </div>
           <div>
-            <div style={styles.logoText}>SyncGenius</div>
-            <div style={styles.logoSub}>Template</div>
+            <div style={styles.logoText}>SyllaBuddy</div>
           </div>
         </div>
 
