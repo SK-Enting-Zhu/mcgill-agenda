@@ -7,7 +7,7 @@ export default function CalendarPage() {
         <div>
           <h1 style={styles.h1}>Full Calendar</h1>
           <p style={styles.sub}>
-            Add / edit / delete events here. Changes also appear on the mini calendar on the Agenda page.
+            Add / edit / delete events here. Changes are reflected across all calendars.
           </p>
         </div>
       </div>

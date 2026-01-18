@@ -1,42 +1,35 @@
 "use client";
 
-
-import React, { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type EventItem = {
   id: string;
   title: string;
+  course?: string | null;
+  weight?: number | null; // percent of final grade
   startAt: string; // ISO
-  endAt?: string | null;
-  allDay?: boolean;
-  notes?: string | null;
+  endAt: string | null; // ISO
+  allDay: boolean;
+  notes: string | null;
+  source: string;
 };
 
 type Props = {
   compact?: boolean;
+  title?: string;
+  description?: string;
+  footerNote?: string | null;
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+function startOfMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex, 1);
 }
 
-function ymd(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function endOfMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0);
 }
 
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function endOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-}
-
-function addMonths(d: Date, delta: number) {
-  return new Date(d.getFullYear(), d.getMonth() + delta, 1);
-}
-
-function sameDay(a: Date, b: Date) {
+function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
@@ -44,522 +37,381 @@ function sameDay(a: Date, b: Date) {
   );
 }
 
-function monthLabel(d: Date) {
-  return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+function ymdKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function safeStr(v: unknown) {
-  return typeof v === "string" ? v : "";
-}
+export default function CalendarMonth({
+  compact = false,
+  title,
+  description,
+  footerNote,
+}: Props) {
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
-function parseNotesMeta(rawNotes: string | null | undefined) {
-  // Notes format we generate:
-  // <user notes>
-  //
-  // —
-  // Course: X
-  // Type: Y
-  // Semester: Z
-  // Weight: W
-  const notes = rawNotes ?? "";
-  const lines = notes.split("\n");
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
 
-  const get = (prefix: string) => {
-    const line = lines.find((l) =>
-      l.trim().toLowerCase().startsWith(prefix.toLowerCase())
-    );
-    if (!line) return "";
-    const idx = line.indexOf(":");
-    if (idx === -1) return "";
-    const val = line.slice(idx + 1).trim();
-    return val === "-" ? "" : val;
-  };
+  const monthStart = useMemo(
+    () => startOfMonth(viewDate.getFullYear(), viewDate.getMonth()),
+    [viewDate]
+  );
 
-  // user notes is everything before a line that is exactly "—"
-  const sepIndex = lines.findIndex((l) => l.trim() === "—");
-  const userNotes =
-    sepIndex === -1 ? notes : lines.slice(0, sepIndex).join("\n").trim();
+  const monthEnd = useMemo(
+    () => endOfMonth(viewDate.getFullYear(), viewDate.getMonth()),
+    [viewDate]
+  );
 
-  return {
-    userNotes,
-    course: get("Course"),
-    type: get("Type"),
-    semester: get("Semester"),
-    weight: get("Weight"),
-  };
-}
+  const monthTitle = useMemo(() => {
+    return viewDate.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+  }, [viewDate]);
 
-function buildEnrichedNotes(
-  userNotes: string,
-  meta: { course: string; type: string; semester: string; weight: string }
-) {
-  const blocks: string[] = [];
-  const u = userNotes.trim();
-  if (u) blocks.push(u);
-  blocks.push("—");
-  blocks.push(`Course: ${meta.course || "-"}`);
-  blocks.push(`Type: ${meta.type || "-"}`);
-  blocks.push(`Semester: ${meta.semester || "-"}`);
-  blocks.push(`Weight: ${meta.weight || "-"}`);
-  return blocks.join("\n");
-}
+  const [eventsByDay, setEventsByDay] = useState<Record<string, EventItem[]>>(
+    () => ({})
+  );
 
-export default function CalendarMonth({ compact = false }: Props) {
-  const [viewDate, setViewDate] = useState<Date>(() => startOfMonth(new Date()));
-  const [events, setEvents] = useState<EventItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [formTitle, setFormTitle] = useState("");
+  const [formStart, setFormStart] = useState("");
+  const [formEnd, setFormEnd] = useState("");
+  const [formAllDay, setFormAllDay] = useState(false);
+  const [formNotes, setFormNotes] = useState("");
+  const [formCourse, setFormCourse] = useState("");
+  const [formWeight, setFormWeight] = useState(""); // keep as string for input
 
-  // modal state
-  const [open, setOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  function goToday() {
+    setViewDate(new Date());
+  }
 
-  // editing state
-  const [editingId, setEditingId] = useState<string | null>(null);
+  function prevMonth() {
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  }
 
-  const [title, setTitle] = useState("");
-  const [course, setCourse] = useState("");
-  const [etype, setEtype] = useState("Assignment");
-  const [semester, setSemester] = useState("");
-  const [weight, setWeight] = useState("");
-  const [noTime, setNoTime] = useState(true);
-  const [notes, setNotes] = useState("");
+  function nextMonth() {
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  }
 
-  const days = useMemo(() => {
-    // Build a 6-week grid (Sun..Sat), starting from the Sunday before the 1st
-    const first = startOfMonth(viewDate);
-    const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay()); // go back to Sunday
+  const gridDates = useMemo(() => {
+    const start = new Date(monthStart);
+    start.setDate(start.getDate() - start.getDay());
 
     const out: Date[] = [];
     for (let i = 0; i < 42; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
+      d.setHours(0, 0, 0, 0);
       out.push(d);
     }
     return out;
-  }, [viewDate]);
+  }, [monthStart]);
 
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, EventItem[]>();
-    for (const ev of events) {
-      // IMPORTANT: interpret in local time for matching day boxes
-      const dt = new Date(ev.startAt);
-      const key = ymd(dt);
-      const arr = map.get(key) ?? [];
-      arr.push(ev);
-      map.set(key, arr);
-    }
-    // sort events within day
-    for (const [k, arr] of map.entries()) {
-      arr.sort(
-        (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-      );
-      map.set(k, arr);
-    }
-    return map;
-  }, [events]);
+  function openCreate(date: Date) {
+    const local = new Date(date);
+    local.setHours(9, 0, 0, 0);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const m = viewDate.getMonth() + 1; // API expects 1..12
-      const y = viewDate.getFullYear();
-
-      const res = await fetch(`/api/events?month=${m}&year=${y}`, {
-        cache: "no-store",
-      });
-      const json = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setEvents([]);
-        setError(
-          json?.error
-            ? String(json.error)
-            : `Failed to load events: ${res.status}`
-        );
-        return;
-      }
-
-      setEvents((json?.events ?? []) as EventItem[]);
-    } catch (e: any) {
-      setEvents([]);
-      setError(e?.message ?? "Failed to load events");
-    } finally {
-      setLoading(false);
-    }
+    setEditingEventId(null);
+    setFormTitle("");
+    setFormCourse("");
+    setFormWeight("");
+    setFormAllDay(false);
+    setFormNotes("");
+    setFormStart(local.toISOString().slice(0, 16));
+    setFormEnd("");
+    setModalOpen(true);
   }
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewDate]);
-
-  function resetForm() {
-    setTitle("");
-    setCourse("");
-    setEtype("Assignment");
-    setSemester("");
-    setWeight("");
-    setNoTime(true);
-    setNotes("");
-  }
-
-  function openNewEvent(d: Date) {
-    setEditingId(null);
-    setSelectedDate(d);
-    resetForm();
-    setOpen(true);
-  }
-
-  function openEditEvent(ev: EventItem) {
-    const dt = new Date(ev.startAt);
-    const meta = parseNotesMeta(ev.notes);
-
-    setEditingId(ev.id);
-    setSelectedDate(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()));
-
-    setTitle(safeStr(ev.title) || "");
-    setCourse(meta.course);
-    setEtype(meta.type || "Assignment");
-    setSemester(meta.semester);
-    setWeight(meta.weight);
-
-    // If event is allDay, keep noTime. Otherwise treat as having time.
-    setNoTime(Boolean(ev.allDay));
-
-    // Only show the user-notes portion in the notes field.
-    setNotes(meta.userNotes);
-
-    setOpen(true);
+  function openEdit(ev: EventItem) {
+    setEditingEventId(ev.id);
+    setFormTitle(ev.title ?? "");
+    setFormCourse(ev.course ?? "");
+    setFormWeight(ev.weight === null || ev.weight === undefined ? "" : String(ev.weight));
+    setFormAllDay(Boolean(ev.allDay));
+    setFormNotes(ev.notes ?? "");
+    setFormStart(ev.startAt.slice(0, 16));
+    setFormEnd(ev.endAt ? ev.endAt.slice(0, 16) : "");
+    setModalOpen(true);
   }
 
   function closeModal() {
-    setOpen(false);
-  }
-
-  async function apiCreate(payload: any) {
-    const res = await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(
-        json?.error ? String(json.error) : `Create failed: ${res.status}`
-      );
-    }
-    return json;
-  }
-
-  async function apiDelete(id: string) {
-    const res = await fetch(`/api/events?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(
-        json?.error ? String(json.error) : `Delete failed: ${res.status}`
-      );
-    }
-    return json;
+    setModalOpen(false);
   }
 
   async function saveEvent() {
-    if (!selectedDate) return;
+    const t = formTitle.trim();
+    if (!t) return;
 
-    const enrichedNotes = buildEnrichedNotes(notes, {
-      course,
-      type: etype,
-      semester,
+    const startRaw = formStart ? new Date(formStart) : null;
+    if (!startRaw || Number.isNaN(startRaw.getTime())) return;
+
+    let endRaw: Date | null = null;
+    if (formEnd) {
+      const e = new Date(formEnd);
+      if (!Number.isNaN(e.getTime())) endRaw = e;
+    }
+
+    const courseClean = formCourse.trim();
+    const weightNum = formWeight.trim() ? Number(formWeight.trim()) : NaN;
+    const weight = Number.isFinite(weightNum) ? weightNum : null;
+
+    const id = editingEventId ?? crypto.randomUUID();
+    const payload: EventItem = {
+      id,
+      title: t,
+      course: courseClean ? courseClean : null,
       weight,
-    });
-
-    const startAtISO = new Date(
-      selectedDate.getFullYear(),
-      selectedDate.getMonth(),
-      selectedDate.getDate(),
-      noTime ? 0 : 9,
-      0,
-      0,
-      0
-    ).toISOString();
-
-    const payload = {
-      title: title.trim() || "Untitled",
-      startAt: startAtISO,
-      allDay: !!noTime,
-      notes: enrichedNotes || null,
+      startAt: startRaw.toISOString(),
+      endAt: endRaw ? endRaw.toISOString() : null,
+      allDay: formAllDay,
+      notes: formNotes.trim() ? formNotes.trim() : null,
       source: "manual",
     };
 
-    try {
-      // Edit = delete + create (works with your current API if you don't have PUT yet)
-      if (editingId) {
-        await apiDelete(editingId);
+    setEventsByDay((prev) => {
+      const next = { ...prev };
+
+      // remove old if editing
+      if (editingEventId) {
+        for (const k of Object.keys(next)) {
+          next[k] = next[k].filter((e) => e.id !== editingEventId);
+          if (next[k].length === 0) delete next[k];
+        }
       }
 
-      await apiCreate(payload);
+      const key = ymdKey(new Date(payload.startAt));
+      const arr = next[key] ? [...next[key]] : [];
+      arr.push(payload);
+      arr.sort((a, b) => a.startAt.localeCompare(b.startAt));
+      next[key] = arr;
 
-      await load();
-      setOpen(false);
-      setEditingId(null);
-    } catch (e: any) {
-      alert(e?.message ?? "Save failed");
-    }
+      return next;
+    });
+
+    setModalOpen(false);
   }
 
-  async function deleteFromModal() {
-    if (!editingId) return;
-    const ok = window.confirm("Delete this event?");
-    if (!ok) return;
-    try {
-      await apiDelete(editingId);
-      await load();
-      setOpen(false);
-      setEditingId(null);
-    } catch (e: any) {
-      alert(e?.message ?? "Delete failed");
-    }
+  async function deleteEvent() {
+    if (!editingEventId) return;
+
+    setEventsByDay((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        next[k] = next[k].filter((e) => e.id !== editingEventId);
+        if (next[k].length === 0) delete next[k];
+      }
+      return next;
+    });
+
+    setModalOpen(false);
   }
 
-  const today = new Date();
-  const monthStart = startOfMonth(viewDate);
-  const monthEnd = endOfMonth(viewDate);
+  // title controls:
+  // - if title is undefined -> show default "Full Calendar"
+  // - if title is "" (empty string) -> hide title entirely (your "remove Mini Calendar" case)
+  const resolvedTitle = title === undefined ? "Full Calendar" : title;
+  const showTitle = (resolvedTitle ?? "").trim().length > 0;
 
   return (
-    <>
-      <div style={styles.wrap}>
-        <div style={styles.headerRow}>
-          <div style={styles.titleBlock}>
-            {compact ? (
-              <div style={styles.monthTitle}>{monthLabel(viewDate)}</div>
-            ) : (
-              <>
-                <div style={styles.h1}>Full Calendar</div>
-                <div style={styles.sub}>
-                  Add / edit / delete events here. Changes also appear on the
-                  mini calendar on the Agenda page.
-                </div>
-                <div style={styles.monthLabel}>{monthLabel(viewDate)}</div>
-              </>
-            )}
-          </div>
-
-          <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={styles.btn}
-              onClick={() => setViewDate(startOfMonth(new Date()))}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              style={styles.iconBtn}
-              onClick={() => setViewDate(addMonths(viewDate, -1))}
-            >
-              ◀
-            </button>
-            <button
-              type="button"
-              style={styles.iconBtn}
-              onClick={() => setViewDate(addMonths(viewDate, 1))}
-            >
-              ▶
-            </button>
-          </div>
-        </div>
-
-        {loading && <div style={styles.info}>Loading events…</div>}
-        {error && <div style={styles.error}>Error: {error}</div>}
-
-        <div style={styles.dowRow}>
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div key={d} style={styles.dow}>
-              {d}
-            </div>
-          ))}
-        </div>
-
-        <div style={styles.grid}>
-          {days.map((d) => {
-            const inMonth = d >= monthStart && d <= monthEnd;
-            const isToday = sameDay(d, today);
-            const key = ymd(d);
-            const dayEvents = eventsByDay.get(key) ?? [];
-
-            return (
-              <div
-                key={key}
-                role="button"
-                tabIndex={0}
-                onClick={() => openNewEvent(d)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openNewEvent(d);
-                  }
-                }}
-                style={{
-                  ...styles.cell,
-                  ...(inMonth ? {} : styles.cellOutsideMonth),
-                  ...(isToday ? styles.cellToday : {}),
-                }}
-                className="calCell"
-              >
-                <div style={styles.cellTopRow}>
-                  <span
-                    style={{
-                      ...styles.dayNum,
-                      ...(inMonth ? {} : styles.dayNumMuted),
-                    }}
-                  >
-                    {d.getDate()}
-                  </span>
-                </div>
-
-                <div style={styles.pills}>
-                  {dayEvents.slice(0, compact ? 1 : 3).map((ev) => (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      style={styles.pill}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditEvent(ev);
-                      }}
-                      title="Click to edit"
-                      className="calPill"
-                    >
-                      {ev.title}
-                    </button>
-                  ))}
-                  {dayEvents.length > (compact ? 1 : 3) && (
-                    <div style={styles.more}>
-                      +{dayEvents.length - (compact ? 1 : 3)} more
-                    </div>
-                  )}
-                </div>
+    <div style={styles.card}>
+      <div style={styles.headerRow}>
+        <div>
+          {!compact && (
+            <>
+              {showTitle && <div style={styles.h1}>{resolvedTitle}</div>}
+              <div style={{ ...styles.sub, marginTop: showTitle ? 4 : 0 }}>
+                {description ?? ""}
               </div>
-            );
-          })}
+            </>
+          )}
+
+          <div style={styles.monthTitle}>{monthTitle}</div>
         </div>
 
-        {!compact && (
-          <div style={styles.footerHint}>
-            Click a day to create an event. Click an event pill to edit it.
-          </div>
-        )}
+        <div style={styles.controls}>
+          <button style={styles.controlBtn} type="button" onClick={goToday}>
+            Today
+          </button>
+          <button style={styles.iconBtn} type="button" onClick={prevMonth}>
+            ◀
+          </button>
+          <button style={styles.iconBtn} type="button" onClick={nextMonth}>
+            ▶
+          </button>
+        </div>
       </div>
 
-      {open && selectedDate && (
+      <div style={styles.dowRow}>
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d} style={styles.dowCell}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div style={styles.grid}>
+        {gridDates.map((d) => {
+          const inMonth = d >= monthStart && d <= monthEnd;
+          const key = ymdKey(d);
+          const dayEvents = eventsByDay[key] ?? [];
+          const isToday = isSameDay(d, today);
+
+          return (
+            <div
+              key={key}
+              style={{
+                ...styles.dayCell,
+                ...(inMonth ? {} : styles.dayCellMuted),
+                ...(isToday ? styles.dayCellToday : {}),
+              }}
+              onClick={() => openCreate(d)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") openCreate(d);
+              }}
+            >
+              <div style={styles.dayNum}>{d.getDate()}</div>
+
+              <div style={styles.pills}>
+                {dayEvents.slice(0, 3).map((ev) => (
+                  <button
+                    key={ev.id}
+                    type="button"
+                    style={styles.pill}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openEdit(ev);
+                    }}
+                    title={
+                      (ev.course || ev.weight !== undefined) && (ev.course || ev.weight !== null)
+                        ? `Click to edit\nCourse: ${ev.course ?? "-"}\nWeight: ${ev.weight ?? "-"}%`
+                        : "Click to edit"
+                    }
+                  >
+                    {ev.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {modalOpen && (
         <div
           style={styles.overlay}
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
+            if (e.target === e.currentTarget) setModalOpen(false);
           }}
         >
-          <div style={styles.modal} role="dialog" aria-modal="true">
+          <div style={styles.modal}>
             <div style={styles.modalHeader}>
               <div style={styles.modalTitle}>
-                {editingId ? "Edit event" : "New event"}
+                {editingEventId ? "Edit event" : "New event"}
               </div>
-              <button
-                type="button"
-                style={styles.closeX}
-                onClick={closeModal}
-                aria-label="Close"
-              >
+              <button style={styles.closeBtn} type="button" onClick={closeModal}>
                 ✕
               </button>
             </div>
 
-            <div style={styles.modalBody}>
-              <div style={styles.rowTop}>
+            <div style={styles.form}>
+              <label style={styles.label}>
+                Title
                 <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Untitled"
-                  style={styles.titleInput}
+                  style={styles.input}
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
                 />
+              </label>
 
-                <div style={styles.dateChip}>
-                  <span style={styles.dateChipLabel}>Date</span>
+              <div style={styles.row2}>
+                <label style={styles.label}>
+                  Course (optional)
                   <input
-                    type="date"
-                    value={ymd(selectedDate)}
-                    onChange={(e) => {
-                      const [yy, mm, dd] = e.target.value
-                        .split("-")
-                        .map(Number);
-                      if (!yy || !mm || !dd) return;
-                      setSelectedDate(new Date(yy, mm - 1, dd));
-                    }}
-                    style={styles.dateInput}
+                    style={styles.input}
+                    value={formCourse}
+                    onChange={(e) => setFormCourse(e.target.value)}
+                    placeholder="e.g., COMP 206"
                   />
-                </div>
-              </div>
+                </label>
 
-              <div style={styles.grid2}>
-                <LabeledInput
-                  label="Course"
-                  value={course}
-                  onChange={setCourse}
-                  placeholder="e.g., COMP 206"
-                />
-                <LabeledInput
-                  label="Type"
-                  value={etype}
-                  onChange={setEtype}
-                  placeholder="Assignment / Exam / Reading"
-                />
-                <LabeledInput
-                  label="Semester"
-                  value={semester}
-                  onChange={setSemester}
-                  placeholder="e.g., Winter 2026"
-                />
-                <LabeledInput
-                  label="Weight"
-                  value={weight}
-                  onChange={setWeight}
-                  placeholder="e.g., 10%"
-                />
-              </div>
-
-              <div style={styles.toggleRow}>
-                <div style={styles.toggleLabel}>All-day</div>
-                <label style={styles.togglePill}>
+                <label style={styles.label}>
+                  Weight % (optional)
                   <input
-                    type="checkbox"
-                    checked={noTime}
-                    onChange={(e) => setNoTime(e.target.checked)}
-                    style={{ marginRight: 10 }}
+                    style={styles.input}
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={formWeight}
+                    onChange={(e) => setFormWeight(e.target.value)}
+                    placeholder="e.g., 20"
                   />
-                  No time
                 </label>
               </div>
 
-              <div style={styles.notesCard}>
-                <div style={styles.notesHeader}>Notes</div>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add notes..."
-                  style={styles.textarea}
-                />
+              <div style={styles.row2}>
+                <label style={styles.label}>
+                  Start
+                  <input
+                    style={styles.input}
+                    type="datetime-local"
+                    value={formStart}
+                    onChange={(e) => setFormStart(e.target.value)}
+                  />
+                </label>
+
+                <label style={styles.label}>
+                  End (optional)
+                  <input
+                    style={styles.input}
+                    type="datetime-local"
+                    value={formEnd}
+                    onChange={(e) => setFormEnd(e.target.value)}
+                  />
+                </label>
               </div>
 
-              <div style={styles.modalFooter}>
-                {editingId ? (
+              <label style={styles.checkRow}>
+                <input
+                  type="checkbox"
+                  checked={formAllDay}
+                  onChange={(e) => setFormAllDay(e.target.checked)}
+                />
+                <span>All day</span>
+              </label>
+
+              <label style={styles.label}>
+                Notes (optional)
+                <textarea
+                  style={styles.textarea}
+                  value={formNotes}
+                  onChange={(e) => setFormNotes(e.target.value)}
+                  rows={4}
+                />
+              </label>
+
+              <div style={styles.actions}>
+                {editingEventId ? (
                   <button
+                    style={{ ...styles.actionBtn, ...styles.dangerBtn }}
                     type="button"
-                    style={styles.btnDangerGhost}
-                    onClick={deleteFromModal}
+                    onClick={deleteEvent}
                   >
                     Delete
                   </button>
@@ -567,352 +419,262 @@ export default function CalendarMonth({ compact = false }: Props) {
                   <div />
                 )}
 
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button
-                    type="button"
-                    style={styles.btnGhost}
-                    onClick={closeModal}
-                  >
-                    Close
+                <div style={styles.actionsRight}>
+                  <button style={styles.actionBtn} type="button" onClick={closeModal}>
+                    Cancel
                   </button>
                   <button
+                    style={{ ...styles.actionBtn, ...styles.primaryBtn }}
                     type="button"
-                    style={styles.btnPrimary}
                     onClick={saveEvent}
                   >
-                    {editingId ? "Save" : "Create"}
+                    Save
                   </button>
                 </div>
               </div>
-
-              <div style={styles.modalHint}>Esc closes. Click outside closes.</div>
             </div>
           </div>
         </div>
       )}
-
-      <style jsx global>{`
-        .calCell {
-          transition: background 120ms ease, border-color 120ms ease,
-            transform 120ms ease;
-        }
-        .calCell:hover {
-          background: rgba(15, 23, 42, 0.055);
-          border-color: rgba(15, 23, 42, 0.14);
-        }
-        .calCell:active {
-          background: rgba(15, 23, 42, 0.085);
-          border-color: rgba(15, 23, 42, 0.2);
-          transform: translateY(1px);
-        }
-        .calPill {
-          transition: filter 120ms ease, transform 120ms ease;
-        }
-        .calPill:hover {
-          filter: brightness(0.94);
-        }
-        .calPill:active {
-          filter: brightness(0.9);
-          transform: translateY(1px);
-        }
-      `}</style>
-    </>
-  );
-}
-
-function LabeledInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div style={styles.fieldRow}>
-      <div style={styles.fieldLabel}>{label}</div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={styles.fieldInput}
-      />
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  wrap: {
-    background: "white",
-    borderRadius: 16,
-    border: "1px solid rgba(15,23,42,0.06)",
-    padding: 18,
+  card: {
+    borderRadius: 22,
+    border: "1px solid rgba(15,23,42,0.08)",
+    background: "#ffffff",
+    padding: 14,
   },
+
   headerRow: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 16,
-    marginBottom: 14,
+    gap: 14,
+    flexWrap: "wrap",
+    marginBottom: 10,
   },
-  titleBlock: { display: "flex", flexDirection: "column", gap: 6 },
-  h1: { fontSize: 22, fontWeight: 800, color: "#0f172a" },
-  monthTitle: { fontSize: 24, fontWeight: 900, color: "#0f172a" },
-  sub: { color: "rgba(15,23,42,0.6)", fontWeight: 600 },
-  monthLabel: { fontSize: 20, fontWeight: 800, color: "#0f172a", marginTop: 6 },
 
-  headerActions: { display: "flex", gap: 10, alignItems: "center" },
-  btn: {
-    border: "1px solid rgba(15,23,42,0.10)",
-    background: "white",
+  h1: {
+    fontWeight: 950,
+    fontSize: 20,
+    letterSpacing: "-0.02em",
+    color: "rgba(15,23,42,0.95)",
+  },
+  sub: {
+    marginTop: 4,
+    fontWeight: 800,
+    color: "rgba(15,23,42,0.55)",
+  },
+  monthTitle: {
+    marginTop: 10,
+    fontWeight: 950,
+    fontSize: 22,
+    letterSpacing: "-0.02em",
+    color: "rgba(15,23,42,0.95)",
+  },
+
+  controls: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  controlBtn: {
+    height: 36,
+    padding: "0 12px",
     borderRadius: 12,
-    padding: "10px 14px",
-    fontWeight: 700,
+    border: "1px solid rgba(15,23,42,0.10)",
+    background: "rgba(15,23,42,0.02)",
+    fontWeight: 950,
     cursor: "pointer",
   },
   iconBtn: {
+    height: 36,
+    width: 40,
+    borderRadius: 12,
     border: "1px solid rgba(15,23,42,0.10)",
-    background: "white",
-    borderRadius: 12,
-    padding: "10px 12px",
-    fontWeight: 800,
+    background: "rgba(15,23,42,0.02)",
+    fontWeight: 950,
     cursor: "pointer",
-  },
-  info: { marginBottom: 10, color: "rgba(15,23,42,0.7)", fontWeight: 600 },
-  error: {
-    marginBottom: 12,
-    background: "rgba(239,68,68,0.08)",
-    border: "1px solid rgba(239,68,68,0.25)",
-    color: "#b91c1c",
-    padding: 12,
-    borderRadius: 12,
-    fontWeight: 700,
   },
 
   dowRow: {
     display: "grid",
     gridTemplateColumns: "repeat(7, 1fr)",
-    gap: 10,
+    gap: 12,
     marginBottom: 10,
+    padding: "0 4px",
   },
-  dow: { color: "rgba(15,23,42,0.6)", fontWeight: 800, fontSize: 14 },
+  dowCell: {
+    fontWeight: 900,
+    color: "rgba(15,23,42,0.55)",
+    fontSize: 12,
+    textAlign: "center",
+  },
 
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(7, 1fr)",
-    gap: 10,
+    gap: 12,
   },
-  cell: {
-    textAlign: "left",
-    border: "1px solid rgba(15,23,42,0.06)",
-    background: "white",
+
+  dayCell: {
     borderRadius: 14,
-    padding: 12,
-    minHeight: 86,
+    border: "1px solid rgba(15,23,42,0.08)",
+    background: "rgba(15,23,42,0.01)",
+    minHeight: 92,
+    padding: 10,
     cursor: "pointer",
-  },
-  cellOutsideMonth: {
-    opacity: 0.55,
-    background: "rgba(15,23,42,0.015)",
-  },
-  cellToday: {
-    outline: "2px solid rgba(99,102,241,0.55)",
-    outlineOffset: 0,
-  },
-  cellTopRow: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "column",
+    outline: "none",
   },
-  dayNum: { fontWeight: 900, color: "#0f172a" },
-  dayNumMuted: { color: "rgba(15,23,42,0.45)" },
+  dayCellMuted: {
+    opacity: 0.45,
+  },
+  dayCellToday: {
+    boxShadow: "0 0 0 2px rgba(99,102,241,0.35) inset",
+  },
 
-  pills: { marginTop: 10, display: "flex", flexDirection: "column", gap: 6 },
-  more: { fontSize: 12, fontWeight: 800, color: "rgba(15,23,42,0.55)" },
+  dayNum: {
+    fontWeight: 950,
+    color: "rgba(15,23,42,0.90)",
+  },
 
-  footerHint: { marginTop: 10, color: "rgba(15,23,42,0.55)", fontWeight: 700 },
+  pills: {
+    marginTop: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  pill: {
+    textAlign: "left",
+    borderRadius: 999,
+    border: "1px solid rgba(15,23,42,0.10)",
+    background: "rgba(15,23,42,0.04)",
+    padding: "6px 10px",
+    fontWeight: 900,
+    fontSize: 12,
+    cursor: "pointer",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+
+  footerHint: {
+    marginTop: 10,
+    fontWeight: 850,
+    color: "rgba(15,23,42,0.55)",
+  },
 
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15, 23, 42, 0.45)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+    background: "rgba(15,23,42,0.40)",
+    display: "grid",
+    placeItems: "center",
+    padding: 16,
     zIndex: 50,
   },
   modal: {
-    width: "min(980px, 96vw)",
-    background: "white",
-    borderRadius: 18,
+    width: "min(680px, 96vw)",
+    borderRadius: 22,
+    background: "#ffffff",
     border: "1px solid rgba(15,23,42,0.10)",
-    boxShadow: "0 20px 70px rgba(0,0,0,0.25)",
-    overflow: "hidden",
+    boxShadow: "0 30px 90px rgba(15,23,42,0.25)",
+    padding: 16,
   },
   modalHeader: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 18px",
-    borderBottom: "1px solid rgba(15,23,42,0.06)",
-    background: "rgba(15,23,42,0.02)",
-  },
-  modalTitle: { fontSize: 22, fontWeight: 900, color: "#0f172a" },
-  closeX: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    border: "1px solid rgba(15,23,42,0.10)",
-    background: "white",
-    cursor: "pointer",
-    fontSize: 18,
-    fontWeight: 900,
-  },
-  modalBody: { padding: 18 },
-
-  rowTop: {
-    display: "grid",
-    gridTemplateColumns: "1fr 220px",
-    gap: 14,
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  titleInput: {
-    border: "1px solid rgba(15,23,42,0.08)",
-    borderRadius: 14,
-    padding: "14px 14px",
-    fontSize: 20,
-    fontWeight: 800,
-    outline: "none",
-  },
-  dateChip: {
-    display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    border: "1px solid rgba(15,23,42,0.08)",
-    borderRadius: 14,
-    padding: "10px 12px",
-    background: "white",
+    marginBottom: 10,
   },
-  dateChipLabel: { fontWeight: 900, color: "rgba(15,23,42,0.55)" },
-  dateInput: { border: "none", outline: "none", fontWeight: 900, fontSize: 16 },
+  modalTitle: {
+    fontWeight: 950,
+    fontSize: 18,
+  },
+  closeBtn: {
+    height: 36,
+    width: 40,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,0.10)",
+    background: "rgba(15,23,42,0.02)",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
 
-  grid2: {
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  row2: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 12,
-    marginBottom: 14,
   },
-  fieldRow: {
-    display: "grid",
-    gridTemplateColumns: "120px 1fr",
-    gap: 12,
-    alignItems: "center",
-    border: "1px solid rgba(15,23,42,0.08)",
-    borderRadius: 14,
-    padding: "10px 12px",
-    background: "white",
-  },
-  fieldLabel: { fontWeight: 900, color: "rgba(15,23,42,0.55)" },
-  fieldInput: { border: "none", outline: "none", fontWeight: 800, fontSize: 16 },
-
-  toggleRow: {
+  label: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    border: "1px solid rgba(15,23,42,0.08)",
-    borderRadius: 14,
-    padding: "12px 12px",
-    marginBottom: 14,
-  },
-  toggleLabel: { fontWeight: 900, color: "rgba(15,23,42,0.55)" },
-  togglePill: {
-    display: "flex",
-    alignItems: "center",
+    flexDirection: "column",
+    gap: 6,
     fontWeight: 900,
-    cursor: "pointer",
+    color: "rgba(15,23,42,0.75)",
   },
-
-  notesCard: {
-    border: "1px solid rgba(15,23,42,0.08)",
+  input: {
+    height: 42,
     borderRadius: 14,
-    overflow: "hidden",
-    background: "white",
-  },
-  notesHeader: {
-    padding: "10px 12px",
-    fontWeight: 900,
-    color: "rgba(15,23,42,0.55)",
-    borderBottom: "1px solid rgba(15,23,42,0.06)",
-    background: "rgba(15,23,42,0.02)",
+    border: "1px solid rgba(15,23,42,0.10)",
+    padding: "0 12px",
+    fontWeight: 850,
+    outline: "none",
   },
   textarea: {
-    width: "100%",
-    minHeight: 160,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,0.10)",
     padding: 12,
-    border: "none",
+    fontWeight: 850,
     outline: "none",
     resize: "vertical",
-    fontSize: 15,
-    fontWeight: 700,
   },
 
-  modalFooter: {
+  checkRow: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    marginTop: 14,
-  },
-  btnGhost: {
-    border: "1px solid rgba(15,23,42,0.10)",
-    background: "white",
-    borderRadius: 999,
-    padding: "12px 18px",
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  btnPrimary: {
-    border: "1px solid rgba(99,102,241,0.35)",
-    background: "rgba(99,102,241,0.92)",
-    color: "white",
-    borderRadius: 999,
-    padding: "12px 18px",
     fontWeight: 900,
-    cursor: "pointer",
+    color: "rgba(15,23,42,0.75)",
   },
-  btnDangerGhost: {
-    border: "1px solid rgba(239,68,68,0.35)",
-    background: "rgba(239,68,68,0.08)",
-    color: "#b91c1c",
-    borderRadius: 999,
-    padding: "12px 18px",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  modalHint: { marginTop: 10, color: "rgba(15,23,42,0.55)", fontWeight: 700 },
 
-  // Darker “blob” pill for events
-  pill: {
-    appearance: "none",
+  actions: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 4,
+  },
+  actionsRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  actionBtn: {
+    height: 42,
+    padding: "0 14px",
+    borderRadius: 14,
     border: "1px solid rgba(15,23,42,0.10)",
-    background: "rgba(15,23,42,0.06)",
-    color: "#0f172a",
-    borderRadius: 999,
-    padding: "6px 10px",
-    fontWeight: 850,
-    fontSize: 12,
-    width: "100%",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    background: "rgba(15,23,42,0.02)",
+    fontWeight: 950,
     cursor: "pointer",
-    textAlign: "left",
+  },
+  primaryBtn: {
+    background: "rgba(15,23,42,0.10)",
+  },
+  dangerBtn: {
+    background: "rgba(239,68,68,0.10)",
+    border: "1px solid rgba(239,68,68,0.22)",
   },
 };

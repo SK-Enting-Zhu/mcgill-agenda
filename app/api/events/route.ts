@@ -1,149 +1,94 @@
-import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { auth0 } from "@/lib/auth0";
+import { prisma } from "@/lib/prisma";
 
-/* ---------- Prisma singleton ---------- */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-const prisma = globalForPrisma.prisma ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-/* ---------- helpers ---------- */
-function badRequest(message: string, status = 400) {
+function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-/* ---------- GET /api/events ---------- */
-/**
- * Supports:
- *  - ?month=MM&year=YYYY   (calendar view)
- *  - ?start=ISO&end=ISO    (explicit range)
- */
+function iso(d: Date) {
+  return d.toISOString();
+}
+
 export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) return jsonError("Unauthorized", 401);
+  const userId = session.user.sub;
 
-    let startDt: Date | null = null;
-    let endDt: Date | null = null;
+  const { searchParams } = new URL(req.url);
+  const month = searchParams.get("month");
+  const year = searchParams.get("year");
 
-    /* ---- preferred: month + year ---- */
-    const month = searchParams.get("month");
-    const year = searchParams.get("year");
+  if (!month || !year) return jsonError("Provide month & year");
 
-    if (month && year) {
-      const m = Number(month);
-      const y = Number(year);
+  const m = Number(month);
+  const y = Number(year);
+  if (!m || !y || m < 1 || m > 12) return jsonError("Invalid month/year");
 
-      if (!Number.isInteger(m) || !Number.isInteger(y) || m < 1 || m > 12) {
-        return badRequest("Invalid month/year", 400);
-      }
+  const startAt = new Date(y, m - 1, 1, 0, 0, 0, 0);
+  const endAt = new Date(y, m, 0, 23, 59, 59, 999);
 
-      startDt = new Date(y, m - 1, 1);
-      endDt = new Date(y, m, 0, 23, 59, 59, 999);
-    }
+  const events = await prisma.event.findMany({
+    where: {
+      userId,
+      startAt: { gte: startAt, lte: endAt },
+    },
+    orderBy: { startAt: "asc" },
+  });
 
-    /* ---- fallback: start + end ---- */
-    if (!startDt || !endDt) {
-      const start = searchParams.get("start");
-      const end = searchParams.get("end");
-
-      if (!start || !end) {
-        return badRequest("Missing month/year or start/end query params", 400);
-      }
-
-      startDt = new Date(start);
-      endDt = new Date(end);
-
-      if (
-        Number.isNaN(startDt.getTime()) ||
-        Number.isNaN(endDt.getTime())
-      ) {
-        return badRequest("Invalid start/end date", 400);
-      }
-    }
-
-    const events = await prisma.event.findMany({
-      where: {
-        startAt: {
-          gte: startDt,
-          lte: endDt,
-        },
-      },
-      orderBy: { startAt: "asc" },
-    });
-
-    return NextResponse.json({ events }, { status: 200 });
-  } catch (err) {
-    console.error("GET /api/events failed:", err);
-    return NextResponse.json(
-      { error: "Failed to load events" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({
+    events: events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      startAt: iso(e.startAt),
+      endAt: e.endAt ? iso(e.endAt) : null,
+      allDay: e.allDay,
+      notes: e.notes,
+      source: e.source,
+    })),
+  });
 }
 
-/* ---------- POST /api/events ---------- */
 export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as {
-      title?: string;
-      startAt?: string;
-      endAt?: string | null;
-      allDay?: boolean;
-      notes?: string | null;
-      source?: string;
-      sourceId?: string | null;
-    };
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) return jsonError("Unauthorized", 401);
+  const userId = session.user.sub;
 
-    if (!body.title || !body.startAt) {
-      return badRequest("Missing title/startAt", 400);
-    }
+  const body = await req.json().catch(() => null);
+  if (!body) return jsonError("Invalid JSON");
 
-    const startDt = new Date(body.startAt);
-    if (Number.isNaN(startDt.getTime())) {
-      return badRequest("Invalid startAt", 400);
-    }
+  const title = String(body.title ?? "").trim();
+  const startAtRaw = body.startAt;
+  const endAtRaw = body.endAt ?? null;
+  const allDay = Boolean(body.allDay ?? false);
+  const notes = body.notes == null ? null : String(body.notes);
+  const source = String(body.source ?? "manual");
 
-    const endDt = body.endAt ? new Date(body.endAt) : null;
-    if (endDt && Number.isNaN(endDt.getTime())) {
-      return badRequest("Invalid endAt", 400);
-    }
+  if (!title) return jsonError("Missing title");
 
-    const created = await prisma.event.create({
-      data: {
-        title: body.title,
-        startAt: startDt,
-        endAt: endDt,
-        allDay: body.allDay ?? true,
-        notes: body.notes ?? null,
-        source: body.source ?? "manual",
-        sourceId: body.sourceId ?? null,
-      },
-    });
+  const startAt = new Date(startAtRaw);
+  if (Number.isNaN(startAt.getTime())) return jsonError("Invalid startAt");
 
-    return NextResponse.json({ event: created }, { status: 201 });
-  } catch (err) {
-    console.error("POST /api/events failed:", err);
-    return NextResponse.json(
-      { error: "Failed to create event" },
-      { status: 500 }
-    );
+  let endAt: Date | null = null;
+  if (endAtRaw) {
+    const e = new Date(endAtRaw);
+    if (Number.isNaN(e.getTime())) return jsonError("Invalid endAt");
+    endAt = e;
   }
-}
 
-/* ---------- DELETE /api/events ---------- */
-export async function DELETE(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+  const created = await prisma.event.create({
+    data: { userId, title, startAt, endAt, allDay, notes, source },
+  });
 
-    if (!id) return badRequest("Missing id", 400);
-
-    await prisma.event.delete({ where: { id } });
-    return NextResponse.json({ ok: true }, { status: 200 });
-  } catch (err) {
-    console.error("DELETE /api/events failed:", err);
-    return NextResponse.json(
-      { error: "Failed to delete event" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({
+    event: {
+      id: created.id,
+      title: created.title,
+      startAt: iso(created.startAt),
+      endAt: created.endAt ? iso(created.endAt) : null,
+      allDay: created.allDay,
+      notes: created.notes,
+      source: created.source,
+    },
+  });
 }

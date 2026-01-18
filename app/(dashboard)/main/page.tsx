@@ -16,7 +16,9 @@ function formatShortDate(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase();
+  return d
+    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    .toUpperCase();
 }
 
 export default function MainDashboardPage() {
@@ -32,7 +34,9 @@ export default function MainDashboardPage() {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/events?month=${month}&year=${year}`, { cache: "no-store" });
+        const res = await fetch(`/api/events?month=${month}&year=${year}`, {
+          cache: "no-store",
+        });
         const data = await res.json();
         if (!cancelled) setEvents(Array.isArray(data) ? data : []);
       } catch {
@@ -47,7 +51,7 @@ export default function MainDashboardPage() {
   }, [month, year]);
 
   const examsCount = useMemo(() => {
-    const examWords = ["exam", "midterm", "final", "quiz", "test"]; // lightweight heuristic for now
+    const examWords = ["exam", "midterm", "final", "quiz", "test"];
     return events.filter((e) => {
       const t = (e.etype ?? "").toLowerCase();
       const title = (e.title ?? "").toLowerCase();
@@ -65,13 +69,10 @@ export default function MainDashboardPage() {
           <div style={styles.kpiLabel}>Pending Items</div>
           <div style={styles.kpiValue}>{pendingCount}</div>
         </div>
+
         <div style={styles.kpiCard}>
           <div style={styles.kpiLabel}>Upcoming Exams</div>
           <div style={styles.kpiValue}>{examsCount}</div>
-        </div>
-        <div style={styles.kpiCard}>
-          <div style={styles.kpiLabel}>Efficiency</div>
-          <div style={styles.kpiValue}>—</div>
         </div>
       </div>
 
@@ -79,13 +80,9 @@ export default function MainDashboardPage() {
       <div style={styles.headerRow}>
         <div>
           <div style={styles.h1}>Academic Schedule</div>
-          <div style={styles.sub}>AI-driven syllabus synchronization</div>
         </div>
 
         <div style={styles.actions}>
-          <button style={styles.iconBtn} aria-label="List view" type="button">
-            ☰
-          </button>
           <button style={styles.btn} type="button">
             + Event
           </button>
@@ -99,9 +96,7 @@ export default function MainDashboardPage() {
       <div style={styles.eventsGrid}>
         {loading ? (
           <div style={styles.muted}>Loading events…</div>
-        ) : events.length === 0 ? (
-          <div style={styles.muted}>No events found for this month yet.</div>
-        ) : (
+        ) : events.length === 0 ? null : (
           events
             .slice()
             .sort((a, b) => {
@@ -113,8 +108,14 @@ export default function MainDashboardPage() {
               <div key={(e.id as any) ?? idx} style={styles.eventCard}>
                 <div style={styles.eventTopRow}>
                   <div style={styles.pillsRow}>
-                    <span style={styles.pillTag}>{(e.etype ?? "event").toUpperCase()}</span>
-                    {e.course ? <span style={styles.pillCourse}>{e.course.toUpperCase()}</span> : null}
+                    <span style={styles.pillTag}>
+                      {(e.etype ?? "event").toUpperCase()}
+                    </span>
+                    {e.course ? (
+                      <span style={styles.pillCourse}>
+                        {e.course.toUpperCase()}
+                      </span>
+                    ) : null}
                   </div>
                   <div style={styles.toggleStub} aria-hidden />
                 </div>
@@ -133,11 +134,14 @@ export default function MainDashboardPage() {
         )}
       </div>
 
-      {/* MINI CALENDAR SECTION */}
+      {/* MINI CALENDAR (DASHBOARD) */}
       <div style={styles.miniSection}>
-        <div style={styles.miniTitle}>Mini Calendar</div>
         <div style={styles.miniWrap}>
-          <CalendarMonth />
+          <CalendarMonth
+            title=""
+            description="All actions done here are reflected on the full calendar page."
+            footerNote={null}
+          />
         </div>
       </div>
     </div>
@@ -153,15 +157,15 @@ const styles: Record<string, React.CSSProperties> = {
 
   kpiRow: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(220px, 1fr))",
+    gridTemplateColumns: "repeat(2, minmax(220px, 1fr))",
     gap: 16,
   },
   kpiCard: {
     borderRadius: 22,
     border: "1px solid rgba(15,23,42,0.08)",
     background: "rgba(15,23,42,0.02)",
-    padding: "18px 18px",
-    minHeight: 88,
+    padding: "22px 22px",
+    minHeight: 102,
   },
   kpiPrimary: {
     background: "rgba(15,23,42,0.06)",
@@ -172,9 +176,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
   kpiValue: {
-    marginTop: 8,
+    marginTop: 10,
     fontWeight: 950,
-    fontSize: 34,
+    fontSize: 38,
     letterSpacing: "-0.02em",
     color: "rgba(15,23,42,0.92)",
   },
@@ -193,24 +197,10 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "-0.03em",
     color: "rgba(15,23,42,0.95)",
   },
-  sub: {
-    marginTop: 4,
-    fontWeight: 800,
-    color: "rgba(15,23,42,0.55)",
-  },
   actions: {
     display: "flex",
     alignItems: "center",
     gap: 10,
-  },
-  iconBtn: {
-    height: 42,
-    width: 48,
-    borderRadius: 14,
-    border: "1px solid rgba(15,23,42,0.10)",
-    background: "rgba(15,23,42,0.02)",
-    fontWeight: 950,
-    cursor: "pointer",
   },
   btn: {
     height: 42,
@@ -307,12 +297,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
-  },
-  miniTitle: {
-    fontWeight: 950,
-    fontSize: 16,
-    letterSpacing: "0.18em",
-    color: "rgba(15,23,42,0.55)",
   },
   miniWrap: {
     borderRadius: 22,

@@ -38,7 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           )}
 
           {user ? (
-            <a href="/auth/logout?returnTo=/main" style={styles.authBtn}>
+            <a href="/auth/logout?returnTo=/login" style={styles.authBtn}>
               Logout
             </a>
           ) : (
@@ -67,8 +67,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-
-        {/* ✅ Mini calendar REMOVED from sidebar */}
       </aside>
 
       <main style={styles.main}>
