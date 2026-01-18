@@ -37,7 +37,7 @@ function App() {
             e.currentTarget.style.display = 'none';
           }}
         />
-        <h1 className="main-title">Welcome to McGill-Agenda</h1>
+        <h1 className="main-title">Welcome to SyllaBuddy</h1>
         
         {isAuthenticated ? (
           <div className="logged-in-section">
