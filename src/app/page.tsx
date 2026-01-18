@@ -11,7 +11,7 @@ export default async function Home() {
     <div className="app-container">
       <div className="main-card-wrapper">
         
-        <h1 className="main-title">McGill-Agenda</h1>
+        <h1 className="main-title">SyllaBuddy</h1>
         
         <div className="action-card">
           {user ? (
